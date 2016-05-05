@@ -78,37 +78,28 @@ const char* vertex_shader =
     "uniform vec4 light_position;"
     "in vec4 vertex_position;"
     "out vec4 vs_light_direction;"
-    "out vec4 light_pos;"
     "void main() {"
     "   gl_Position = vertex_position;"
     "   vs_light_direction = light_position - gl_Position;"
-    "   light_pos = light_position;"
     "}";
 
 const char* water_vertex_shader =
     "#version 330 core\n"
-    "uniform float water_corner;"
-    "uniform float water_len;"
-    "uniform int dimension;"
-    "uniform float t;"
+    "uniform vec3 look;"
     "uniform vec4 light_position;"
     "in vec4 vertex_position;"
     "in vec4 vertex_color;"
     "in float height;"
     "out vec4 vs_light_direction;"
-    "out vec4 light_pos;"
+    "out vec4 vert_viewdir;"
     "out vec4 vert_color;"
     "void main() {"
-    //"    float i = (vertex_position[0]-water_corner) * dimension / water_len;"
-    //"    float j = (vertex_position[2]-water_corner) * dimension / water_len;"
     "    vec4 newpos = vertex_position;"
-    //"    newpos[1] = .25 * ((sin(i/10 + t * 50)  + cos(j/5 + t * 100)) - 1);"
     "    newpos[1] = height - 0.3;"
     "    gl_Position = newpos;"
-    //"    gl_Position = vertex_position;"
     "    vs_light_direction = light_position - gl_Position;"
-    "    light_pos = light_position;"
     "    vert_color = vertex_color;"
+    "    vert_viewdir = vec4(-look, 1.0);"
     "}";
 
 // Add light stuff later would be cool
@@ -126,12 +117,12 @@ const char* geometry_shader =
     "uniform mat4 projection;"
     "uniform mat4 view;"
     "in vec4 vs_light_direction[];"
-    "in vec4 light_pos[];"
     "in vec4 vert_color[];"
-    "out vec4 light_position;"
+    "in vec4 vert_viewdir[];"
     "out vec4 normal;"
     "out vec4 light_direction;"
     "out vec4 frag_color;"
+    "out vec4 viewdir;"
     "void main() {"
     "   int n = 0;"
     "   vec3 a = gl_in[0].gl_Position.xyz;"
@@ -143,8 +134,8 @@ const char* geometry_shader =
     "   for (n = 0; n < gl_in.length(); n++) {"
     "       light_direction = normalize(vs_light_direction[n]);"
     "       gl_Position = projection * view * gl_in[n].gl_Position;"
-    "       light_position = light_pos[n];"
     "       frag_color=vert_color[n];"
+    "       viewdir = vert_viewdir[n];"
     "       EmitVertex();"
     "   }"
     "   EndPrimitive();"
@@ -177,7 +168,6 @@ const char* fragment_shader =
     "in vec4 normal;"
     "in vec4 light_direction;"
     "in vec4 world_pos;"
-    "in vec4 light_position;"
     "uniform vec3 diffuse_color;"
     "out vec4 fragment_color;"
     "void main() {"
@@ -192,16 +182,28 @@ const char* water_fragment_shader =
     "#version 330 core\n"
     "in vec4 normal;"
     "in vec4 light_direction;"
-    "in vec4 world_pos;"
-    "in vec4 light_position;"
     "in vec4 frag_color;"
+    "in vec4 viewdir;"
     "out vec4 fragment_color;"
     "void main() {"
+    "   int shininess = 2;"
+    "   float float_vr = clamp("
+    "       dot(normalize(viewdir), reflect(normalize(-light_direction), normal)),"
+    "       0.0, 1.0);"
+    "   int n = 1;"
+    "   for (n = 1; n < shininess; n++){"
+    "       float_vr *= float_vr;"
+    "   }"
+    "   vec4 specular = vec4(1.0, 1.0, 1.0, 1.0) * float_vr;"
     "   float dot_nl = dot(normalize(light_direction), normal);"
     "   dot_nl = clamp(dot_nl, 0.0, 1.0);"
-    "   vec4 color = frag_color;"
-    "   color = clamp(dot_nl * color, 0.0, 1.0);"
+    //"   vec4 color = frag_color;"
+    "   vec4 color = vec4(0.0, 0.6, 1.0, 0.6);"
+    "   color = clamp(dot_nl * color + specular, 0.0, 1.0);"
+    //"   color = clamp(specular, 0.0, 1.0);"
     "   fragment_color = color;"
+    //"   fragment_color = vec4(float_vr, 0.0, 0.0, 1.0);"
+    //"   fragment_color = viewdir;"
     "}";
 
 const char* OpenGlErrorToString(GLenum error) {
@@ -649,7 +651,7 @@ int main(int argc, char* argv[]) {
     std::vector<float> water_height_curr;
     std::vector<float> water_height_prev;
     float water_height = -0.3f;
-    int dimension = 100;
+    int dimension = 20;
     float water_corner = -1.8f;
     float water_len = 3.6f;
     float dwater = water_len / dimension;
@@ -688,7 +690,7 @@ int main(int argc, char* argv[]) {
     float precision = 1000.0f;
     int xpos = rand() % 1000;
     int zpos = rand() % 1000;
-    int maxdrops = 10;
+    int maxdrops = 20;
     for (int i=0; i < maxdrops; i++){
         rain_indices.push_back(i);
     }
@@ -831,12 +833,13 @@ int main(int argc, char* argv[]) {
     water_program.AddUniform("projection");
     water_program.AddUniform("view");
     water_program.AddUniform("light_position");
-    water_program.AddUniform("diffuse_color");
-    water_program.AddUniform("alpha");
-    water_program.AddUniform("water_len");
-    water_program.AddUniform("water_corner");
-    water_program.AddUniform("dimension");
-    water_program.AddUniform("t");
+    // water_program.AddUniform("diffuse_color");
+    water_program.AddUniform("look");
+    // water_program.AddUniform("alpha");
+    // water_program.AddUniform("water_len");
+    // water_program.AddUniform("water_corner");
+    // water_program.AddUniform("dimension");
+    // water_program.AddUniform("t");
     // rain program
     GLProgram rain_program(point_vert, point_geom, point_frag);
     rain_program.AddUniform("projection");
@@ -854,7 +857,7 @@ int main(int argc, char* argv[]) {
     float gravity = 10.0f; //lol
     float H = 1.7f;
     float time = 0;
-    float delta = 0.2f;
+    float delta = 0.3f;
     // Main loop
     while (!glfwWindowShouldClose(window)) {
         // Setup some basic window stuff.
@@ -875,7 +878,7 @@ int main(int argc, char* argv[]) {
 
         clock_t curr = clock();
         //float diff = ((float)(curr - prev)/CLOCKS_PER_SEC);
-        float diff = 0.003333f;
+        float diff = 0.003333f / 2.0f;
         time += diff;
         prev = curr;
         //if (rain_drops.size() > 0){
@@ -911,7 +914,7 @@ int main(int argc, char* argv[]) {
             int xpos = rand() % 1000;
             int zpos = rand() % 1000;
             glm::vec4 newpos
-                (xpos / precision * range - 1.5f, 5.0f,
+                (xpos / precision * range - 1.5f, 10.0f,
                  zpos / precision * range - 1.5f, 1.0f);
             rain_drops.push_back(newpos);
             rain_speeds.push_back(0.0f);
@@ -926,19 +929,78 @@ int main(int argc, char* argv[]) {
         }
         water_vel_prev = water_vel_curr;
         water_height_prev = water_height_curr;
-        // maybe fix later lol
-        for (int j = 1; j < dimension; j++){
-            for (int i = 1; i < dimension; i++){
+        for (int j = 0; j <= dimension; j++){
+            for (int i = 0; i <= dimension; i++){
                 k = j * (dimension + 1) + i;
-                glm::vec2 height_gradient (
-                    (water_height_prev[k + 1] - water_height_prev[k - 1]) / (2*dwater),
-                    (water_height_prev[k + (dimension + 1)]
-                        - water_height_prev[k - (dimension + 1)]) /(2*dwater));
-                glm::vec2 u_dudx = water_vel_prev[k][0]
-                    * (water_vel_prev[k + 1] - water_vel_prev[k - 1]) / (2*dwater);
-                glm::vec2 v_dvdx = water_vel_prev[k][1]
-                    * (water_vel_prev[k + (dimension + 1)]
-                        - water_vel_prev[k - (dimension + 1)]) / (2*dwater);
+                float height_grad_i;
+                float height_grad_j;
+                glm::vec2 dudx;
+                glm::vec2 dvdx;
+                if (i == 0){
+                    height_grad_i =
+                        (water_height_prev[k + 1] - water_height_prev[k])
+                        / (2*dwater);
+                    dudx = 
+                        (water_vel_prev[k + 1]- water_vel_prev[k])
+                        / (2*dwater);
+                } else if (i == dimension){
+                    height_grad_i =
+                        (water_height_prev[k] - water_height_prev[k - 1])
+                        / (2*dwater);
+                    dudx = 
+                        (water_vel_prev[k]- water_vel_prev[k - 1])
+                        / (2*dwater);
+                } else {
+                    height_grad_i = 
+                        (water_height_prev[k + 1] - water_height_prev[k - 1])
+                        / (2 * dwater);
+                    // height_grad_i =
+                    //     (2 * (water_height_prev[k + 1] - water_height_prev[k - 1])
+                    //         + water_height_prev[k + (dimension + 1) + 1]
+                    //         - water_height_prev[k + (dimension + 1) - 1]
+                    //         + water_height_prev[k - (dimension + 1) + 1]
+                    //         - water_height_prev[k - (dimension + 1) - 1])
+                    //     / (8*dwater);
+                    dudx = 
+                        (water_vel_prev[k + 1]- water_vel_prev[k - 1])
+                        / (2*dwater);
+                }
+                if (j == 0){
+                    height_grad_j = 
+                        (water_height_prev[k + (dimension + 1)]
+                            - water_height_prev[k])
+                        / (2*dwater);
+                    dvdx = (water_vel_prev[k + (dimension + 1)]
+                        - water_vel_prev[k])
+                    / (2*dwater);
+                } else if (j == dimension){
+                    height_grad_j = 
+                        (water_height_prev[k]
+                            - water_height_prev[k - (dimension + 1)])
+                        / (2*dwater);
+                    dvdx = (water_vel_prev[k]
+                        - water_vel_prev[k - (dimension + 1)])
+                    / (2*dwater);
+                } else {
+                    height_grad_j = 
+                        (water_height_prev[k + (dimension + 1)]
+                            - water_height_prev[k - (dimension + 1)])
+                        / (2 * dwater);
+                    // height_grad_j =
+                    //     (2 * (water_height_prev[k + (dimension + 1)]
+                    //             - water_height_prev[k - (dimension + 1)])
+                    //         + water_height_prev[k + (dimension + 1) + 1]
+                    //         - water_height_prev[k + (dimension + 1) - 1]
+                    //         + water_height_prev[k - (dimension + 1) + 1]
+                    //         - water_height_prev[k - (dimension + 1) - 1])
+                    //     / (8*dwater);
+                    dvdx = (water_vel_prev[k + (dimension + 1)]
+                        - water_vel_prev[k - (dimension + 1)])
+                    / (2*dwater);
+                }
+                glm::vec2 height_gradient (height_grad_i, height_grad_j);
+                glm::vec2 u_dudx = water_vel_prev[k][0] * dudx;
+                glm::vec2 v_dvdx = water_vel_prev[k][1] * dvdx;
                 water_vel_curr[k] =
                     (-gravity * height_gradient - u_dudx - v_dvdx)
                     * diff
@@ -948,16 +1010,63 @@ int main(int argc, char* argv[]) {
         for (int j = 1; j < dimension; j++){
             for (int i = 1; i < dimension; i++){
                 k = j * (dimension + 1) + i;
-                float vel_grad_x =
-                    (water_vel_curr[k + 1][0] - water_vel_curr[k-1][0]) / (2*dwater);
-                float vel_grad_y =
-                    (water_vel_curr[k + (dimension + 1)][1]
-                        - water_vel_curr[k - (dimension + 1)][1]) / (2*dwater);
-                float u_dhdx = water_vel_curr[k][0]
-                    * (water_height_prev[k + 1] - water_height_prev[k - 1]) / (2*dwater);
-                float v_dhdy = water_vel_curr[k][1]
-                    * ((water_height_prev[k + (dimension + 1)]
-                        - water_height_prev[k - (dimension + 1)]) / (2*dwater));
+                float vel_grad_x;
+                float vel_grad_y;
+                float u_dhdx;
+                float v_dhdy;
+                if (i == 0){
+                    vel_grad_x =
+                        (water_vel_curr[k + 1][0] - water_vel_curr[k][0])
+                        / (dwater);
+                    u_dhdx =
+                        water_vel_curr[k][0]
+                        * (water_height_prev[k + 1] - water_height_prev[k])
+                        / (dwater);
+                } else if (i == dimension){
+                    vel_grad_x =
+                        (water_vel_curr[k][0] - water_vel_curr[k - 1][0])
+                        / (dwater);
+                    u_dhdx =
+                        water_vel_curr[k][0]
+                        * (water_height_prev[k] - water_height_prev[k - 1])
+                        / (dwater);
+                } else {
+                    vel_grad_x =
+                        (water_vel_curr[k + 1][0] - water_vel_curr[k-1][0])
+                        / (2*dwater);
+                    u_dhdx =
+                        water_vel_curr[k][0]
+                        * (water_height_prev[k + 1] - water_height_prev[k - 1])
+                        / (2*dwater);
+                }
+                if (j == 0){
+                    vel_grad_y =
+                        (water_vel_curr[k + (dimension + 1)][1]
+                            - water_vel_curr[k][1])
+                        / (dwater);
+                    v_dhdy = water_vel_curr[k][1]
+                        * ((water_height_prev[k + (dimension + 1)]
+                            - water_height_prev[k])
+                        / (dwater));
+                } else if (j == dimension){
+                    vel_grad_y =
+                        (water_vel_curr[k][1]
+                            - water_vel_curr[k - (dimension + 1)][1])
+                        / (dwater);
+                    v_dhdy = water_vel_curr[k][1]
+                        * ((water_height_prev[k]
+                            - water_height_prev[k - (dimension + 1)])
+                        / (dwater));
+                } else {
+                    vel_grad_y =
+                        (water_vel_curr[k + (dimension + 1)][1]
+                            - water_vel_curr[k - (dimension + 1)][1])
+                        / (2*dwater);
+                    v_dhdy = water_vel_curr[k][1]
+                        * ((water_height_prev[k + (dimension + 1)]
+                            - water_height_prev[k - (dimension + 1)])
+                        / (2*dwater));
+                }
                 water_height_curr[k] =
                     (-(water_height_prev[k] + H) * (vel_grad_x + vel_grad_y)
                         - u_dhdx - v_dhdy) * diff
@@ -987,10 +1096,11 @@ int main(int argc, char* argv[]) {
             water_program.SetUniform("projection", projection_matrix);
             water_program.SetUniform("view", view_matrix);
             water_program.SetUniform("light_position", light_position);
-            water_program.SetUniform("water_len", water_len);
-            water_program.SetUniform("water_corner", water_corner);
-            water_program.SetUniform("dimension", dimension);
-            water_program.SetUniform("t", time);
+            water_program.SetUniform("look", look);
+            // water_program.SetUniform("water_len", water_len);
+            // water_program.SetUniform("water_corner", water_corner);
+            // water_program.SetUniform("dimension", dimension);
+            // water_program.SetUniform("t", time);
             // Draw water
             water_program.SetUniform("diffuse_color", water_color);
             CHECK_GL_ERROR(glBindVertexArray(array_objects[kWaterVao]));
