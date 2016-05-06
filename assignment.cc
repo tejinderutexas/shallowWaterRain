@@ -555,6 +555,13 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
 int main(int argc, char* argv[]) {
     if (!glfwInit()) exit(EXIT_FAILURE);
+
+    std::cout<<argc<<std::endl;
+    if (argc != 3){
+        std::cout<<"Invalid args.\n";
+        std::cout<<"Usage: ./runit.sh dimension maxraindrops"<<std::endl;
+        exit(EXIT_SUCCESS);
+    }
   
     glfwSetErrorCallback(ErrorCallback);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
@@ -650,13 +657,15 @@ int main(int argc, char* argv[]) {
     std::vector<glm::vec2> water_vel_prev;
     std::vector<float> water_height_curr;
     std::vector<float> water_height_prev;
+    std::vector<float> water_forces;
     float water_height = -0.3f;
-    int dimension = 20;
+    int dimension = atoi(argv[1]);
     float water_corner = -1.8f;
     float water_len = 3.6f;
     float dwater = water_len / dimension;
     for (int j = 0; j <= dimension; j++){
         for (int i = 0; i <= dimension; i++){
+            water_forces.push_back(0.0f);
             water_highlight_timers.push_back(0.0f);
             water_colors.push_back(glm::vec4(0.0f, 0.4f, 1.0f, 1.0f));
             // water vertices
@@ -690,7 +699,7 @@ int main(int argc, char* argv[]) {
     float precision = 1000.0f;
     int xpos = rand() % 1000;
     int zpos = rand() % 1000;
-    int maxdrops = 20;
+    int maxdrops = atoi(argv[2]);
     for (int i=0; i < maxdrops; i++){
         rain_indices.push_back(i);
     }
@@ -855,6 +864,7 @@ int main(int argc, char* argv[]) {
     // rain variables
     clock_t prev = clock();
     float gravity = 10.0f; //lol
+    float forceconst = 2.0f;
     float H = 1.7f;
     float time = 0;
     float delta = 0.3f;
@@ -897,8 +907,7 @@ int main(int argc, char* argv[]) {
                 int index = j * (dimension + 1) + i;
                 water_highlight_timers[index] = 0.5f;
                 water_colors[index] = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-                water_height_prev[index] -= delta;
-                water_height_curr[index] -= delta;
+                water_forces[index] = forceconst;;
                 rain_drops.erase(rain_drops.begin() + k);
                 rain_speeds.erase(rain_speeds.begin() + k);
             } else {
@@ -914,10 +923,10 @@ int main(int argc, char* argv[]) {
             int xpos = rand() % 1000;
             int zpos = rand() % 1000;
             glm::vec4 newpos
-                (xpos / precision * range - 1.5f, 10.0f,
+                (xpos / precision * range - 1.5f, 5.0f,
                  zpos / precision * range - 1.5f, 1.0f);
             rain_drops.push_back(newpos);
-            rain_speeds.push_back(0.0f);
+            rain_speeds.push_back(2.0f);
         }
         for (k = 0; k < water_highlight_timers.size(); k++){
             if (water_highlight_timers[k] > 0){
@@ -934,12 +943,18 @@ int main(int argc, char* argv[]) {
                 k = j * (dimension + 1) + i;
                 float height_grad_i;
                 float height_grad_j;
+                float force_grad_i;
+                float force_grad_j;
                 glm::vec2 dudx;
                 glm::vec2 dvdx;
                 if (i == 0){
                     height_grad_i =
                         (water_height_prev[k + 1] - water_height_prev[k])
                         / (2*dwater);
+                    force_grad_i = 
+                        (water_forces[k + 1]
+                            - water_forces[k])
+                        / (2 * dwater);
                     dudx = 
                         (water_vel_prev[k + 1]- water_vel_prev[k])
                         / (2*dwater);
@@ -947,12 +962,20 @@ int main(int argc, char* argv[]) {
                     height_grad_i =
                         (water_height_prev[k] - water_height_prev[k - 1])
                         / (2*dwater);
+                    force_grad_i = 
+                        (water_forces[k]
+                            - water_forces[k - 1])
+                        / (2 * dwater);
                     dudx = 
                         (water_vel_prev[k]- water_vel_prev[k - 1])
                         / (2*dwater);
                 } else {
                     height_grad_i = 
                         (water_height_prev[k + 1] - water_height_prev[k - 1])
+                        / (2 * dwater);
+                    force_grad_i = 
+                        (water_forces[k + 1]
+                            - water_forces[k - 1])
                         / (2 * dwater);
                     // height_grad_i =
                     //     (2 * (water_height_prev[k + 1] - water_height_prev[k - 1])
@@ -970,6 +993,10 @@ int main(int argc, char* argv[]) {
                         (water_height_prev[k + (dimension + 1)]
                             - water_height_prev[k])
                         / (2*dwater);
+                    force_grad_j = 
+                        (water_forces[k + (dimension + 1)]
+                            - water_forces[k])
+                        / (2 * dwater);
                     dvdx = (water_vel_prev[k + (dimension + 1)]
                         - water_vel_prev[k])
                     / (2*dwater);
@@ -978,6 +1005,10 @@ int main(int argc, char* argv[]) {
                         (water_height_prev[k]
                             - water_height_prev[k - (dimension + 1)])
                         / (2*dwater);
+                    force_grad_j = 
+                        (water_forces[k]
+                            - water_forces[k - (dimension + 1)])
+                        / (2 * dwater);
                     dvdx = (water_vel_prev[k]
                         - water_vel_prev[k - (dimension + 1)])
                     / (2*dwater);
@@ -985,6 +1016,10 @@ int main(int argc, char* argv[]) {
                     height_grad_j = 
                         (water_height_prev[k + (dimension + 1)]
                             - water_height_prev[k - (dimension + 1)])
+                        / (2 * dwater);
+                    force_grad_j = 
+                        (water_forces[k + (dimension + 1)]
+                            - water_forces[k - (dimension + 1)])
                         / (2 * dwater);
                     // height_grad_j =
                     //     (2 * (water_height_prev[k + (dimension + 1)]
@@ -999,10 +1034,14 @@ int main(int argc, char* argv[]) {
                     / (2*dwater);
                 }
                 glm::vec2 height_gradient (height_grad_i, height_grad_j);
+                glm::vec2 force_gradient (force_grad_i, force_grad_j);
                 glm::vec2 u_dudx = water_vel_prev[k][0] * dudx;
                 glm::vec2 v_dvdx = water_vel_prev[k][1] * dvdx;
                 water_vel_curr[k] =
-                    (-gravity * height_gradient - u_dudx - v_dvdx)
+                    (-(
+                        (gravity + water_forces[k]) * height_gradient
+                        + 1.7f * force_gradient)
+                    - u_dudx - v_dvdx)
                     * diff
                     + water_vel_prev[k];
             }
@@ -1010,6 +1049,7 @@ int main(int argc, char* argv[]) {
         for (int j = 1; j < dimension; j++){
             for (int i = 1; i < dimension; i++){
                 k = j * (dimension + 1) + i;
+                water_forces[k] = 0;
                 float vel_grad_x;
                 float vel_grad_y;
                 float u_dhdx;
