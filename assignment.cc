@@ -117,6 +117,32 @@ const char* geometry_shader =
     "uniform mat4 projection;"
     "uniform mat4 view;"
     "in vec4 vs_light_direction[];"
+    "out vec4 normal;"
+    "out vec4 light_direction;"
+    "out vec4 viewdir;"
+    "void main() {"
+    "   int n = 0;"
+    "   vec3 a = gl_in[0].gl_Position.xyz;"
+    "   vec3 b = gl_in[1].gl_Position.xyz;"
+    "   vec3 c = gl_in[2].gl_Position.xyz;"
+    "   vec3 u = normalize(b - a);"
+    "   vec3 v = normalize(c - a);"
+    "   normal = normalize(vec4(normalize(cross(u, v)), 0.0));"
+    "   for (n = 0; n < gl_in.length(); n++) {"
+    "       light_direction = normalize(vs_light_direction[n]);"
+    "       gl_Position = projection * view * gl_in[n].gl_Position;"
+    "       EmitVertex();"
+    "   }"
+    "   EndPrimitive();"
+    "}";
+
+const char* water_geometry_shader =
+    "#version 330 core\n"
+    "layout (triangles) in;"
+    "layout (triangle_strip, max_vertices = 3) out;"
+    "uniform mat4 projection;"
+    "uniform mat4 view;"
+    "in vec4 vs_light_direction[];"
     "in vec4 vert_color[];"
     "in vec4 vert_viewdir[];"
     "out vec4 normal;"
@@ -816,10 +842,7 @@ int main(int argc, char* argv[]) {
 
     GLShader geom = GLShader(geometry_shader, GLShader::GEOMETRY);
     GLShader point_geom = GLShader(point_geometry_shader,  GLShader::GEOMETRY);
-    //GLShader skeleton_g_shader = GLShader(skeleton_geometry_shader, GLShader::GEOMETRY);
-    //GLShader line_g_shader = GLShader(line_geometry_shader, GLShader::GEOMETRY);
-    //GLShader phong_g_shader = GLShader(phong_geometry_shader, GLShader::GEOMETRY);
-    //GLShader texture_g_shader = GLShader(texture_geometry_shader, GLShader::GEOMETRY);
+    GLShader water_geom = GLShader(water_geometry_shader,  GLShader::GEOMETRY);
 
     GLShader frag = GLShader(fragment_shader,  GLShader::FRAGMENT);
     GLShader point_frag = GLShader(point_fragment_shader,  GLShader::FRAGMENT);
@@ -836,7 +859,7 @@ int main(int argc, char* argv[]) {
     basic_program.AddUniform("diffuse_color");
     basic_program.AddUniform("alpha");
     // water program
-    GLProgram water_program(water_vert, geom, water_frag);
+    GLProgram water_program(water_vert, water_geom, water_frag);
     water_program.AddVertAttrib("vertex_color");
     water_program.AddVertAttrib("height");
     water_program.AddUniform("projection");
@@ -900,14 +923,12 @@ int main(int argc, char* argv[]) {
         int k = 0;
         while (k < rain_drops.size()){
             if (rain_drops[k][1] < water_height){
-                //int i = (int)((rain_drops[k][0]-water_corner) * (dimension + 1) / water_len);
-                //int j = (int)((rain_drops[k][2]-water_corner) * (dimension + 1) / water_len);
                 int i = (int)((rain_drops[k][0] - water_corner) / dwater);
                 int j = (int)((rain_drops[k][2] - water_corner) / dwater);
                 int index = j * (dimension + 1) + i;
                 water_highlight_timers[index] = 0.5f;
                 water_colors[index] = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
-                water_forces[index] = forceconst;;
+                water_forces[index] = forceconst;
                 rain_drops.erase(rain_drops.begin() + k);
                 rain_speeds.erase(rain_speeds.begin() + k);
             } else {
@@ -977,13 +998,6 @@ int main(int argc, char* argv[]) {
                         (water_forces[k + 1]
                             - water_forces[k - 1])
                         / (2 * dwater);
-                    // height_grad_i =
-                    //     (2 * (water_height_prev[k + 1] - water_height_prev[k - 1])
-                    //         + water_height_prev[k + (dimension + 1) + 1]
-                    //         - water_height_prev[k + (dimension + 1) - 1]
-                    //         + water_height_prev[k - (dimension + 1) + 1]
-                    //         - water_height_prev[k - (dimension + 1) - 1])
-                    //     / (8*dwater);
                     dudx = 
                         (water_vel_prev[k + 1]- water_vel_prev[k - 1])
                         / (2*dwater);
@@ -1021,14 +1035,6 @@ int main(int argc, char* argv[]) {
                         (water_forces[k + (dimension + 1)]
                             - water_forces[k - (dimension + 1)])
                         / (2 * dwater);
-                    // height_grad_j =
-                    //     (2 * (water_height_prev[k + (dimension + 1)]
-                    //             - water_height_prev[k - (dimension + 1)])
-                    //         + water_height_prev[k + (dimension + 1) + 1]
-                    //         - water_height_prev[k + (dimension + 1) - 1]
-                    //         + water_height_prev[k - (dimension + 1) + 1]
-                    //         - water_height_prev[k - (dimension + 1) - 1])
-                    //     / (8*dwater);
                     dvdx = (water_vel_prev[k + (dimension + 1)]
                         - water_vel_prev[k - (dimension + 1)])
                     / (2*dwater);
@@ -1137,10 +1143,6 @@ int main(int argc, char* argv[]) {
             water_program.SetUniform("view", view_matrix);
             water_program.SetUniform("light_position", light_position);
             water_program.SetUniform("look", look);
-            // water_program.SetUniform("water_len", water_len);
-            // water_program.SetUniform("water_corner", water_corner);
-            // water_program.SetUniform("dimension", dimension);
-            // water_program.SetUniform("t", time);
             // Draw water
             water_program.SetUniform("diffuse_color", water_color);
             CHECK_GL_ERROR(glBindVertexArray(array_objects[kWaterVao]));
