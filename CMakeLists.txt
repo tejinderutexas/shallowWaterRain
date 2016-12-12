@@ -9,7 +9,6 @@ set(CMAKE_FIND_LIBRARY_SUFFIXES "${CMAKE_FIND_LIBRARY_SUFFIXES}")
 if (APPLE)
   link_directories(
     "/usr/local/lib"
-    "/opt/local/lib"
   )
 elseif (UNIX)
   link_directories(
