@@ -73,7 +73,7 @@ glm::vec3 look = glm::vec3(0, 0, -1);
 glm::vec3 up = glm::vec3(0, 1, 0);
 
 const char* vertex_shader =
-    "#version 330 core\n"
+    "#version 410 core\n"
     "uniform vec4 light_position;"
     "in vec4 vertex_position;"
     "out vec4 vs_light_direction;"
@@ -83,7 +83,7 @@ const char* vertex_shader =
     "}";
 
 const char* water_vertex_shader =
-    "#version 330 core\n"
+    "#version 410 core\n"
     "uniform vec3 look;"
     "uniform vec4 light_position;"
     "in vec4 vertex_position;"
@@ -91,6 +91,15 @@ const char* water_vertex_shader =
     "out vec4 vs_light_direction;"
     "out vec4 vert_viewdir;"
     "out vec4 vert_color;"
+//       for some reason using height before vert_color causes the shader to
+//       not work.
+//
+//       old code:
+//       newpos[1] = height - 0.3;
+//       vs_light_direction = light_position - gl_Position;
+//       vert_color = vertex_color;"
+//
+//       The following shader code actually works. Still investigating why.
     "void main() {"
     "    vec4 newpos = vertex_position;"
     "    newpos[1] = height - 0.3;"
@@ -101,14 +110,14 @@ const char* water_vertex_shader =
 
 // Add light stuff later would be cool
 const char* point_vertex_shader =
-    "#version 330 core\n"
+    "#version 410 core\n"
     "in vec4 vertex_position;"
     "void main() {"
     "   gl_Position = vertex_position;"
     "}";
 
 const char* geometry_shader =
-    "#version 330 core\n"
+    "#version 410 core\n"
     "layout (triangles) in;"
     "layout (triangle_strip, max_vertices = 3) out;"
     "uniform mat4 projection;"
@@ -134,7 +143,7 @@ const char* geometry_shader =
     "}";
 
 const char* water_geometry_shader =
-    "#version 330 core\n"
+    "#version 410 core\n"
     "layout (triangles) in;"
     "layout (triangle_strip, max_vertices = 3) out;"
     "uniform mat4 projection;"
@@ -164,7 +173,7 @@ const char* water_geometry_shader =
 
 // Later make the rain streak or something. would be kinda cool.
 const char* point_geometry_shader =
-    "#version 330 core\n"
+    "#version 410 core\n"
     "layout (points) in;"
     "layout (line_strip, max_vertices = 2) out;"
     "uniform mat4 projection;"
@@ -178,14 +187,14 @@ const char* point_geometry_shader =
     "}";
 
 const char* point_fragment_shader =
-    "#version 330 core\n"
+    "#version 410 core\n"
     "out vec4 fragment_color;"
     "void main() {"
     "    fragment_color = vec4(0.0, 0.4, 1.0, 1.0);"
     "}";
 
 const char* fragment_shader =
-    "#version 330 core\n"
+    "#version 410 core\n"
     "in vec4 normal;"
     "in vec4 light_direction;"
     "in vec4 world_pos;"
@@ -200,7 +209,7 @@ const char* fragment_shader =
     "}";
 
 const char* water_fragment_shader =
-    "#version 330 core\n"
+    "#version 410 core\n"
     "in vec4 normal;"
     "in vec4 light_direction;"
     "in vec4 viewdir;"
@@ -268,7 +277,7 @@ const char* OpenGlErrorToString(GLenum error) {
                 << &log[0];                                                 \
       glfwTerminate();                                                      \
       exit(EXIT_FAILURE);                                                   \
-    }                                                                       \
+    }                                                                      \
   }
 
 #define CHECK_GL_PROGRAM_ERROR(id)                                           \
@@ -354,7 +363,7 @@ class GLProgram {
                 v_shader_loc(vertex.ID()),
                 g_shader_loc(geometry.ID()),
                 f_shader_loc(fragment.ID()){
-            program_id = 0;
+            // program_id = 0;
             CHECK_GL_ERROR(program_id = glCreateProgram());
             if (vertex.Type() == GLShader::VERTEX) {
                 CHECK_GL_ERROR(glAttachShader(program_id, vertex.ID()));
@@ -555,7 +564,7 @@ void MousePosCallback(GLFWwindow* window, double mouse_x, double mouse_y) {
         //look = (at - eye) / camera_distance;
         //glm::vec3 tan = glm::normalize(glm::cross(look, up));
         //up = glm::normalize(glm::cross(tan, look));
-    // Fix me.
+        // Fix me.
   } else if (drag_state && current_button == GLFW_MOUSE_BUTTON_RIGHT) {
       glm::vec3 center = eye + camera_distance * look;
       if (delta_y > 0){
@@ -575,7 +584,6 @@ void MouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 int main(int argc, char* argv[]) {
     if (!glfwInit()) exit(EXIT_FAILURE);
 
-    std::cout<<argc<<std::endl;
     if (argc != 3){
         std::cout<<"Invalid args.\n";
         std::cout<<"Usage: ./runit.sh dimension maxraindrops"<<std::endl;
@@ -583,12 +591,12 @@ int main(int argc, char* argv[]) {
     }
   
     glfwSetErrorCallback(ErrorCallback);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
+    glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_SAMPLES, 4);
-  
+
     GLFWwindow* window = glfwCreateWindow(window_width, window_height,
                                           &window_title[0], nullptr, nullptr);
     CHECK_SUCCESS(window != nullptr);
@@ -606,103 +614,115 @@ int main(int argc, char* argv[]) {
     std::cout << "Renderer: " << renderer << "\n";
     std::cout << "OpenGL version supported:" << version << "\n";
     // Construction of box
-    std::vector<glm::vec4> box_vertices;
-    std::vector<glm::uvec3> box_faces;
-    // exterior vertices
-    box_vertices.push_back(glm::vec4(-2.0f, -2.0f, -2.0f, 1.0f));
-    box_vertices.push_back(glm::vec4(-2.0f, -2.0f, 2.0f, 1.0f));
-    box_vertices.push_back(glm::vec4(-2.0f, 0.0f, -2.0f, 1.0f));
-    box_vertices.push_back(glm::vec4(-2.0f, 0.0f, 2.0f, 1.0f));
-    box_vertices.push_back(glm::vec4(2.0f, -2.0f, -2.0f, 1.0f));
-    box_vertices.push_back(glm::vec4(2.0f, -2.0f, 2.0f, 1.0f));
-    box_vertices.push_back(glm::vec4(2.0f, 0.0f, -2.0f, 1.0f));
-    box_vertices.push_back(glm::vec4(2.0f, 0.0f, 2.0f, 1.0f));
-    int box_vert_len = box_vertices.size();
-    // interior vertices
-    box_vertices.push_back(glm::vec4(-1.8f, -2.0f, -1.8f, 1.0f));
-    box_vertices.push_back(glm::vec4(-1.8f, -2.0f, 1.8f, 1.0f));
-    box_vertices.push_back(glm::vec4(-1.8f, 0.0f, -1.8f, 1.0f));
-    box_vertices.push_back(glm::vec4(-1.8f, 0.0f, 1.8f, 1.0f));
-    box_vertices.push_back(glm::vec4(1.8f, -2.0f, -1.8f, 1.0f));
-    box_vertices.push_back(glm::vec4(1.8f, -2.0f, 1.8f, 1.0f));
-    box_vertices.push_back(glm::vec4(1.8f, 0.0f, -1.8f, 1.0f));
-    box_vertices.push_back(glm::vec4(1.8f, 0.0f, 1.8f, 1.0f));
-    // top vertices
-    box_vertices.push_back(glm::vec4(-1.8, 0.0f, -2.0f, 1.0f));
-    box_vertices.push_back(glm::vec4(-1.8, 0.0f, 2.0f, 1.0f));
-    box_vertices.push_back(glm::vec4(1.8, 0.0f, -2.0f, 1.0f));
-    box_vertices.push_back(glm::vec4(1.8, 0.0f, 2.0f, 1.0f));
-    // bottom vertices
-    box_vertices.push_back(glm::vec4(-1.8, -1.99f, -1.8f, 1.0f));
-    box_vertices.push_back(glm::vec4(-1.8, -1.99f, 1.8f, 1.0f));
-    box_vertices.push_back(glm::vec4(1.8, -1.99f, -1.8f, 1.0f));
-    box_vertices.push_back(glm::vec4(1.8, -1.95f, 1.8f, 1.0f));
-    // exterior faces
-    box_faces.push_back(glm::uvec3(5, 7, 1));
-    box_faces.push_back(glm::uvec3(3, 1, 7));
-    box_faces.push_back(glm::uvec3(4, 6, 5));
-    box_faces.push_back(glm::uvec3(7, 5, 6));
-    box_faces.push_back(glm::uvec3(1, 3, 0));
-    box_faces.push_back(glm::uvec3(2, 0, 3));
-    box_faces.push_back(glm::uvec3(4, 0, 6));
-    box_faces.push_back(glm::uvec3(2, 6, 0));
-    // interior faces
-    box_faces.push_back(glm::uvec3(box_vert_len + 1, box_vert_len + 7, box_vert_len + 5));
-    box_faces.push_back(glm::uvec3(box_vert_len + 7, box_vert_len + 1, box_vert_len + 3));
-    box_faces.push_back(glm::uvec3(box_vert_len + 5, box_vert_len + 6, box_vert_len + 4));
-    box_faces.push_back(glm::uvec3(box_vert_len + 6, box_vert_len + 5, box_vert_len + 7));
-    box_faces.push_back(glm::uvec3(box_vert_len + 0, box_vert_len + 3, box_vert_len + 1));
-    box_faces.push_back(glm::uvec3(box_vert_len + 3, box_vert_len + 0, box_vert_len + 2));
-    box_faces.push_back(glm::uvec3(box_vert_len + 6, box_vert_len + 0, box_vert_len + 4));
-    box_faces.push_back(glm::uvec3(box_vert_len + 0, box_vert_len + 6, box_vert_len + 2));
-    // Box top faces
-    box_faces.push_back(glm::uvec3(3, 16, 2));
-    box_faces.push_back(glm::uvec3(16, 3, 17));
-    box_faces.push_back(glm::uvec3(15, 11, 17));
-    box_faces.push_back(glm::uvec3(17, 19, 15));
-    box_faces.push_back(glm::uvec3(19, 6, 18));
-    box_faces.push_back(glm::uvec3(6, 19, 7));
-    box_faces.push_back(glm::uvec3(18, 16, 10));
-    box_faces.push_back(glm::uvec3(10, 14, 18));
-    // Box bottom faces
-    box_faces.push_back(glm::uvec3(22, 20, 21));
-    box_faces.push_back(glm::uvec3(21, 23, 22));
+    const float box_vertices [96] = {
+                                // exterior vertices
+                                -2.0f, -2.0f, -2.0f, 1.0f,
+                                -2.0f, -2.0f, 2.0f, 1.0f,
+                                -2.0f, 0.0f, -2.0f, 1.0f,
+                                -2.0f, 0.0f, 2.0f, 1.0f,
+                                2.0f, -2.0f, -2.0f, 1.0f,
+                                2.0f, -2.0f, 2.0f, 1.0f,
+                                2.0f, 0.0f, -2.0f, 1.0f,
+                                2.0f, 0.0f, 2.0f, 1.0f,
+                                // interior vertices
+                                -1.8f, -2.0f, -1.8f, 1.0f,
+                                -1.8f, -2.0f, 1.8f, 1.0f,
+                                -1.8f, 0.0f, -1.8f, 1.0f,
+                                -1.8f, 0.0f, 1.8f, 1.0f,
+                                1.8f, -2.0f, -1.8f, 1.0f,
+                                1.8f, -2.0f, 1.8f, 1.0f,
+                                1.8f, 0.0f, -1.8f, 1.0f,
+                                1.8f, 0.0f, 1.8f, 1.0f,
+                                // top vertices
+                                -1.8, 0.0f, -2.0f, 1.0f,
+                                -1.8, 0.0f, 2.0f, 1.0f,
+                                1.8, 0.0f, -2.0f, 1.0f,
+                                1.8, 0.0f, 2.0f, 1.0f,
+                                // bottom vertices
+                                -1.8, -1.90f, -1.8f, 1.0f,
+                                -1.8, -1.90f, 1.8f, 1.0f,
+                                1.8, -1.90f, -1.8f, 1.0f,
+                                1.8, -1.90f, 1.8f, 1.0f};
+    int box_vert_len = 8;
+    const int box_faces [78] = {
+                                // exterior vertices
+                                5, 7, 1,
+                                3, 1, 7,
+                                4, 6, 5,
+                                7, 5, 6,
+                                1, 3, 0,
+                                2, 0, 3,
+                                4, 0, 6,
+                                2, 6, 0,
+                                // interior vertices
+                                box_vert_len + 1, box_vert_len + 7, box_vert_len + 5,
+                                box_vert_len + 7, box_vert_len + 1, box_vert_len + 3,
+                                box_vert_len + 5, box_vert_len + 6, box_vert_len + 4,
+                                box_vert_len + 6, box_vert_len + 5, box_vert_len + 7,
+                                box_vert_len + 0, box_vert_len + 3, box_vert_len + 1,
+                                box_vert_len + 3, box_vert_len + 0, box_vert_len + 2,
+                                box_vert_len + 6, box_vert_len + 0, box_vert_len + 4,
+                                box_vert_len + 0, box_vert_len + 6, box_vert_len + 2,
+                                // box top faces
+                                3, 16, 2,
+                                16, 3, 17,
+                                15, 11, 17,
+                                17, 19, 15,
+                                19, 6, 18,
+                                6, 19, 7,
+                                18, 16, 10,
+                                10, 14, 18,
+                                // box bottom faces
+                                22, 20, 21,
+                                21, 23, 22};
     // Water construction
-    std::vector<glm::vec4> water_vertices;
-    std::vector<glm::uvec3> water_faces;
-    std::vector<glm::vec2> water_vel_curr;
-    std::vector<glm::vec2> water_vel_prev;
-    std::vector<float> water_height_curr;
-    std::vector<float> water_height_prev;
-    std::vector<float> water_forces;
+    // TODO: HEAP ALLOCATE STUFF
+    printf("sizeof(float) == %lu\nsizeof(uint32_t) == %lu\n", sizeof(float), sizeof(uint32_t));
     float water_height = -0.3f;
     int dimension = atoi(argv[1]);
-    float water_corner = -1.8f;
-    float water_len = 3.6f;
-    float dwater = water_len / dimension;
-    for (int j = 0; j <= dimension; j++){
-        for (int i = 0; i <= dimension; i++){
-            water_forces.push_back(0.0f);
+    int dimension_plus = dimension + 1;
+    int dimension_2 = dimension * dimension;
+    int dimension_plus_2 = dimension_plus * dimension_plus;
+    uint32_t * water_faces    = new uint32_t [dimension_2 * 8];
+    float * float_arr         = new float    [dimension_plus_2 * 11];
+    float * water_vertices    = float_arr;                          // size: dimension_plus_2 * 4
+    float * water_height_curr = float_arr + dimension_plus_2 * 4;   // size: dimension_plus_2
+    float * water_height_prev = float_arr + dimension_plus_2 * 5;   // size: dimension_plus_2
+    float * water_forces      = float_arr + dimension_plus_2 * 6;   // size: dimension_plus_2
+    float * water_vel_prev    = float_arr + dimension_plus_2 * 7;   // size: dimension_plus_2 * 2
+    float * water_vel_curr    = float_arr + dimension_plus_2 * 9;   // size: dimension_plus_2 * 2
+    float water_corner = -1.8f, water_len = 3.6f, dwater = water_len / dimension;
+    int grid_i = 0, index_i = 0, vert_i = 0, vel_i = 0;
+    for (int j = 0; j < dimension_plus; j++) {
+        for (int i = 0; i < dimension_plus; i++) {
             // water vertices
-            water_vertices.push_back(glm::vec4(
-                water_corner + dwater * i,
-                water_height,
-                water_corner + dwater * j,
-                1.0f));
-            water_vel_curr.push_back(glm::vec2(0.0f, 0.0f));
-            water_vel_prev.push_back(glm::vec2(0.0f, 0.0f));
-            water_height_curr.push_back(0.0f);
-            water_height_prev.push_back(0.0f);
+            water_vertices[vert_i]     = water_corner + dwater * i;
+            water_vertices[vert_i + 1] = water_height;
+            water_vertices[vert_i + 2] = water_corner + dwater * j;
+            water_vertices[vert_i + 3] = 1.0f;
+
+            water_forces[grid_i] = 0.0f;
+
+            water_vel_curr[vel_i] = 0.f;
+            water_vel_prev[vel_i] = 0.f;
+            water_vel_curr[vel_i + 1] = 0.f;
+            water_vel_prev[vel_i + 1] = 0.f;
+
+            water_height_curr[grid_i] = 0.0f;
+            water_height_prev[grid_i] = 0.0f;
+
+            vert_i += 4;
+            vel_i += 2;
+            grid_i++;
             // water faces
             if (i < dimension && j < dimension) {
-                water_faces.push_back(glm::uvec3(
-                    i * (dimension + 1) + j + 1,
-                    i * (dimension + 1) + j,
-                    (i + 1) * (dimension + 1) + j));
-                water_faces.push_back(glm::uvec3(
-                    (i + 1) * (dimension + 1) + j,
-                    (i + 1) * (dimension + 1) + j + 1,
-                    i * (dimension + 1) + j + 1));
+                water_faces[index_i]     = i * dimension_plus + j + 1;
+                water_faces[index_i + 1] = i * dimension_plus + j;
+                water_faces[index_i + 2] = (i + 1) * dimension_plus + j;
+                water_faces[index_i + 3] = (i + 1) * dimension_plus + j;
+                water_faces[index_i + 4] = (i + 1) * dimension_plus + j + 1;
+                water_faces[index_i + 5] = i * dimension_plus + j + 1;
+                index_i += 6;
             }
         }
     }
@@ -720,19 +740,15 @@ int main(int argc, char* argv[]) {
     }
     rain_speeds.push_back(0.0f);
     // Plane construction
-    std::vector<glm::vec4> plane_vertices;
-    std::vector<glm::uvec3> plane_faces;
-    // Plane vertices
-    plane_vertices.push_back(glm::vec4(0.0f, -2.0f, 0.0f, 1.0f));
-    plane_vertices.push_back(glm::vec4(99999.0f, 0.0f, 0.0f, 0.0f));
-    plane_vertices.push_back(glm::vec4(0.0f, 0.0f, 99999.0f, 0.0f));
-    plane_vertices.push_back(glm::vec4(-99999.0f, 0.0f, 0.0f, 0.0f));
-    plane_vertices.push_back(glm::vec4(0.0f, 0.0f, -99999.0f, 0.0f));
-    // Plane faces
-    plane_faces.push_back(glm::vec3(0, 2, 1));
-    plane_faces.push_back(glm::vec3(0, 3, 2));
-    plane_faces.push_back(glm::vec3(0, 4, 3));
-    plane_faces.push_back(glm::vec3(0, 1, 4));
+    const float plane_vertices [20] = {0.f, -2.f, 0.f, 1.f,
+                                       99999.f, 0.f, 0.f, 0.f,
+                                       0.f, 0.f, 99999.f, 0.f,
+                                       -99999.f, 0.f, 0.f, 0.f,
+                                       0.f, 0.f, -99999.f, 0.f};
+    const int plane_faces [12] = {0, 2, 1,
+                                  0, 3, 2,
+                                  0, 4, 3,
+                                  0, 1, 4};
     // Setup our VAOs.
     CHECK_GL_ERROR(glGenVertexArrays(kNumVaos, array_objects));
     // Setup the box array object.
@@ -743,16 +759,16 @@ int main(int argc, char* argv[]) {
     CHECK_GL_ERROR(
         glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kBoxVao][kVertexBuffer]));
     CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-                                sizeof(float) * box_vertices.size() * 4,
-                                &box_vertices[0], GL_STATIC_DRAW));
+                                sizeof(float) * 96,
+                                box_vertices, GL_STATIC_DRAW));
     CHECK_GL_ERROR(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0));
     CHECK_GL_ERROR(glEnableVertexAttribArray(0));
     // Setup element array buffer.
     CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
                                 buffer_objects[kBoxVao][kIndexBuffer]));
     CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                                sizeof(uint32_t) * box_faces.size() * 3,
-                                &box_faces[0], GL_STATIC_DRAW));
+                                sizeof(uint32_t) * 78,
+                                box_faces, GL_STATIC_DRAW));
     // Setup the water array object.
     CHECK_GL_ERROR(glBindVertexArray(array_objects[kWaterVao]));
     // Generate buffer objects
@@ -761,24 +777,24 @@ int main(int argc, char* argv[]) {
     CHECK_GL_ERROR(
         glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kWaterVao][kVertexBuffer]));
     CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-                                sizeof(float) * water_vertices.size() * 4,
-                                &water_vertices[0], GL_STATIC_DRAW));
+                                sizeof(float) * dimension_plus_2 * 4,
+                                water_vertices, GL_STATIC_DRAW));
     CHECK_GL_ERROR(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0));
     CHECK_GL_ERROR(glEnableVertexAttribArray(0));
     // Setup vertex data in a VBO.
     CHECK_GL_ERROR(
         glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kWaterVao][kVertAttr1]));
     CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-                                sizeof(float) * water_height_curr.size(),
-                                &water_height_curr[0], GL_STATIC_DRAW));
+                                sizeof(float) * dimension_plus_2,
+                                water_height_curr, GL_STATIC_DRAW));
     CHECK_GL_ERROR(glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 0, 0));
     CHECK_GL_ERROR(glEnableVertexAttribArray(1));
     // Setup element array buffer.
     CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
                                 buffer_objects[kWaterVao][kIndexBuffer]));
     CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                                sizeof(uint32_t) * water_faces.size() * 3,
-                                &water_faces[0], GL_STATIC_DRAW));
+                                sizeof(uint32_t) * dimension_2 * 6,
+                                water_faces, GL_STATIC_DRAW));
     //setup the rain
     CHECK_GL_ERROR(glBindVertexArray(array_objects[kRainVao]));
     // Generate buffer objects
@@ -805,16 +821,16 @@ int main(int argc, char* argv[]) {
     CHECK_GL_ERROR(
         glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kPlaneVao][kVertexBuffer]));
     CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-                                sizeof(float) * plane_vertices.size() * 4,
-                                &plane_vertices[0], GL_STATIC_DRAW));
+                                sizeof(float) * 20,
+                                plane_vertices, GL_STATIC_DRAW));
     CHECK_GL_ERROR(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0));
     CHECK_GL_ERROR(glEnableVertexAttribArray(0));
     // Setup element array buffer.
     CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
                                 buffer_objects[kPlaneVao][kIndexBuffer]));
     CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                                sizeof(uint32_t) * plane_faces.size() * 3,
-                                &plane_faces[0], GL_STATIC_DRAW));
+                                sizeof(uint32_t) * 12,
+                                plane_faces, GL_STATIC_DRAW));
 
     GLShader vert = GLShader(vertex_shader, GLShader::VERTEX);
     GLShader point_vert = GLShader(point_vertex_shader,  GLShader::VERTEX);
@@ -927,124 +943,118 @@ int main(int argc, char* argv[]) {
             rain_drops.push_back(newpos);
             rain_speeds.push_back(2.0f);
         }
-        water_vel_prev = water_vel_curr;
-        water_height_prev = water_height_curr;
-        for (int j = 0; j <= dimension; j++){
-            for (int i = 0; i <= dimension; i++){
-                k = j * (dimension + 1) + i;
+        vel_i = 0;
+        grid_i = 0;
+        for (int j = 0; j < dimension_plus; j++) {
+            for (int i = 0; i < dimension_plus; i++) {
+                water_vel_prev[vel_i] = water_vel_curr[vel_i];
+                water_vel_prev[vel_i + 1] = water_vel_curr[vel_i];
+                vel_i += 2;
+
+                water_height_prev[grid_i] = water_height_curr[grid_i];
+                grid_i++;
+            }
+        }
+        float double_dwater = 2 * dwater;
+        vel_i = 0, grid_i = 0;
+        for (int j = 0; j < dimension_plus; j++){
+            for (int i = 0; i < dimension_plus; i++){
                 float height_grad_i = 0;
                 float height_grad_j = 0;
                 float force_grad_i = 0;
                 float force_grad_j = 0;
                 glm::vec2 dudx;
                 glm::vec2 dvdx;
+                glm::vec2 prev_vel       = glm::vec2(water_vel_prev[vel_i], water_vel_prev[vel_i + 1]),
+                          prev_vel_left  = glm::vec2(water_vel_prev[vel_i - 2], water_vel_prev[vel_i - 1]),
+                          prev_vel_right = glm::vec2(water_vel_prev[vel_i + 2], water_vel_prev[vel_i + 3]),
+                          prev_vel_down  = glm::vec2(water_vel_prev[vel_i + dimension_plus * 2],
+                                                     water_vel_prev[vel_i + dimension_plus * 2 + 1]),
+                          prev_vel_up    = glm::vec2(water_vel_prev[vel_i - dimension_plus * 2],
+                                                      water_vel_prev[vel_i - dimension_plus * 2 + 1]);
+
+                float height       = water_height_prev[grid_i];
+                float height_left  = water_height_prev[grid_i - 1];
+                float height_right = water_height_prev[grid_i + 1];
+                float height_down  = water_height_prev[grid_i + dimension_plus];
+                float height_up    = water_height_prev[grid_i - dimension_plus];
+
+                float force       = water_forces[grid_i];
+                float force_left  = water_forces[grid_i - 1];
+                float force_right = water_forces[grid_i + 1];
+                float force_down  = water_forces[grid_i + dimension_plus];
+                float force_up    = water_forces[grid_i - dimension_plus];
                 if (i == 0){
-                    height_grad_i =
-                        (water_height_prev[k + 1] - water_height_prev[k])
-                        / (2*dwater);
-                    force_grad_i = 
-                        (water_forces[k + 1]
-                            - water_forces[k])
-                        / (2 * dwater);
-                    dudx = 
-                        (water_vel_prev[k + 1]- water_vel_prev[k])
-                        / (2*dwater);
+                    height_grad_i = (height_right - height) / (double_dwater);
+                    force_grad_i  = (force_right - force) / (double_dwater);
+                    dudx          = (prev_vel_right - prev_vel) / (double_dwater);
                 } else if (i == dimension){
-                    height_grad_i =
-                        (water_height_prev[k] - water_height_prev[k - 1])
-                        / (2*dwater);
-                    force_grad_i = 
-                        (water_forces[k]
-                            - water_forces[k - 1])
-                        / (2 * dwater);
-                    dudx = 
-                        (water_vel_prev[k]- water_vel_prev[k - 1])
-                        / (2*dwater);
+                    height_grad_i = (height - height_left) / (double_dwater);
+                    force_grad_i  = (force - force_left) / (double_dwater);
+                    dudx = (prev_vel - prev_vel_left) / (double_dwater);
                 } else {
-                    height_grad_i = 
-                        (water_height_prev[k + 1] - water_height_prev[k - 1])
-                        / (2 * dwater);
-                    force_grad_i = 
-                        (water_forces[k + 1]
-                            - water_forces[k - 1])
-                        / (2 * dwater);
-                    dudx = 
-                        (water_vel_prev[k + 1]- water_vel_prev[k - 1])
-                        / (2*dwater);
+                    height_grad_i = (height_right - height_left) / (double_dwater);
+                    force_grad_i  = (force_right - force_left) / (double_dwater);
+                    dudx          = (prev_vel_right - prev_vel_left) / (double_dwater);
                 }
                 if (j == 0){
-                    height_grad_j = 
-                        (water_height_prev[k + (dimension + 1)]
-                            - water_height_prev[k])
-                        / (2*dwater);
-                    force_grad_j = 
-                        (water_forces[k + (dimension + 1)]
-                            - water_forces[k])
-                        / (2 * dwater);
-                    dvdx = (water_vel_prev[k + (dimension + 1)]
-                        - water_vel_prev[k])
-                    / (2*dwater);
+                    height_grad_j = (height_down - height) / (double_dwater);
+                    force_grad_j  = (force_down - force) / (double_dwater);
+                    dvdx = (prev_vel_down - prev_vel) / (double_dwater);
                 } else if (j == dimension){
-                    height_grad_j = 
-                        (water_height_prev[k]
-                            - water_height_prev[k - (dimension + 1)])
-                        / (2*dwater);
-                    force_grad_j = 
-                        (water_forces[k]
-                            - water_forces[k - (dimension + 1)])
-                        / (2 * dwater);
-                    dvdx = (water_vel_prev[k]
-                        - water_vel_prev[k - (dimension + 1)])
-                    / (2*dwater);
+                    height_grad_j = (height - height_up) / (double_dwater);
+                    force_grad_j  = (force - force_up) / (double_dwater);
+                    dvdx = (prev_vel - prev_vel_up) / (double_dwater);
                 } else {
-                    height_grad_j = 
-                        (water_height_prev[k + (dimension + 1)]
-                            - water_height_prev[k - (dimension + 1)])
-                        / (2 * dwater);
-                    force_grad_j = 
-                        (water_forces[k + (dimension + 1)]
-                            - water_forces[k - (dimension + 1)])
-                        / (2 * dwater);
-                    dvdx = (water_vel_prev[k + (dimension + 1)]
-                        - water_vel_prev[k - (dimension + 1)])
-                    / (2*dwater);
+                    height_grad_j = (height_down - height_up) / (double_dwater);
+                    force_grad_j  = (force_down - force_up) / (double_dwater);
+                    dvdx = (prev_vel_down - prev_vel_up) / (double_dwater);
                 }
                 glm::vec2 height_gradient (height_grad_i, height_grad_j);
                 glm::vec2 force_gradient (force_grad_i, force_grad_j);
-                glm::vec2 u_dudx = water_vel_prev[k][0] * dudx;
-                glm::vec2 v_dvdx = water_vel_prev[k][1] * dvdx;
-                water_vel_curr[k] =
-                    (-(
-                        (gravity + water_forces[k]) * height_gradient
-                        + 1.7f * force_gradient)
-                    - u_dudx - v_dvdx)
-                    * diff
-                    + water_vel_prev[k];
+                glm::vec2 u_dudx = water_vel_prev[vel_i] * dudx;
+                glm::vec2 v_dvdx = water_vel_prev[vel_i + 1] * dvdx;
+                glm::vec2 curr_vel = (-(gravity + force) * height_gradient
+                                      - 1.7f * force_gradient - u_dudx - v_dvdx) * diff
+                                     + prev_vel;
+                water_vel_curr[vel_i] = curr_vel[0];
+                water_vel_curr[vel_i + 1] = curr_vel[1];
+                grid_i++;
+                vel_i += 2;
             }
         }
+        vel_i = 0;
+        grid_i = 0;
         for (int j = 1; j < dimension; j++){
             for (int i = 1; i < dimension; i++){
-                k = j * (dimension + 1) + i;
-                water_forces[k] = 0;
-                float vel_grad_x =
-                    (water_vel_curr[k + 1][0] - water_vel_curr[k-1][0])
-                    / (2*dwater);
-                float u_dhdx =
-                    water_vel_curr[k][0]
-                    * (water_height_prev[k + 1] - water_height_prev[k - 1])
-                    / (2*dwater);
+                glm::vec2 dudx;
+                glm::vec2 dvdx;
+                glm::vec2 vel       = glm::vec2(water_vel_curr[vel_i], water_vel_curr[vel_i + 1]),
+                          vel_left  = glm::vec2(water_vel_curr[vel_i - 2], water_vel_curr[vel_i - 1]),
+                          vel_right = glm::vec2(water_vel_curr[vel_i + 2], water_vel_curr[vel_i + 3]),
+                          vel_down  = glm::vec2(water_vel_curr[vel_i + dimension_plus * 2],
+                                                water_vel_curr[vel_i + dimension_plus * 2 + 1]),
+                          vel_up    = glm::vec2(water_vel_curr[vel_i - dimension_plus * 2],
+                                                      water_vel_curr[vel_i - dimension_plus * 2 + 1]);
+
+                float height       = water_height_prev[grid_i];
+                float height_left  = water_height_prev[grid_i - 1];
+                float height_right = water_height_prev[grid_i + 1];
+                float height_down  = water_height_prev[grid_i + dimension_plus];
+                float height_up    = water_height_prev[grid_i - dimension_plus];
+                // TODO: water pressure or some shit 
+                // water_forces[grid_i] = 0;
+                float vel_grad_x = (vel_right[0] - vel_left[0]) / (double_dwater);
+                float u_dhdx = vel[0]  * (height_right - height_left) / (double_dwater);
                 float vel_grad_y =
-                    (water_vel_curr[k + (dimension + 1)][1]
-                        - water_vel_curr[k - (dimension + 1)][1])
-                    / (2*dwater);
-                float v_dhdy = water_vel_curr[k][1]
-                    * ((water_height_prev[k + (dimension + 1)]
-                        - water_height_prev[k - (dimension + 1)])
-                    / (2*dwater));
-                water_height_curr[k] =
-                    (-(water_height_prev[k] + H) * (vel_grad_x + vel_grad_y)
+                    (vel_down[1] - vel_up[1]) / (double_dwater);
+                float v_dhdy = vel[1] * (height_up - height_down) / (double_dwater);
+                water_height_curr[grid_i] =
+                    (-(water_height_prev[grid_i] + H) * (vel_grad_x + vel_grad_y)
                         - u_dhdx - v_dhdy) * diff
-                    + water_height_prev[k];
+                    + water_height_prev[grid_i];
+                grid_i++;
+                vel_i += 2;
             }
         }
         if (basic_program.ReadyProgram()){
@@ -1055,12 +1065,12 @@ int main(int argc, char* argv[]) {
             // Draw box.
             basic_program.SetUniform("diffuse_color", box_color);
             CHECK_GL_ERROR(glBindVertexArray(array_objects[kBoxVao]));
-            CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, box_faces.size() * 3,
+            CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, 78,
                                           GL_UNSIGNED_INT, 0));
             // Draw basic.
             basic_program.SetUniform("diffuse_color", plane_color);
             CHECK_GL_ERROR(glBindVertexArray(array_objects[kPlaneVao]));
-            CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, plane_faces.size() * 3,
+            CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, 12,
                                           GL_UNSIGNED_INT, 0));
         } else {
             std::cout << "Shit fucked up\n";
@@ -1078,10 +1088,10 @@ int main(int argc, char* argv[]) {
                 glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kWaterVao][kVertAttr1]));
             // CHECK_GL_ERROR(glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0));
             CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-                                        sizeof(float) * water_height_curr.size(),
-                                        &water_height_curr[0], GL_STATIC_DRAW));
+                                        sizeof(float) * dimension_plus_2,
+                                        water_height_curr, GL_STATIC_DRAW));
             // CHECK_GL_ERROR(glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 0, 0));
-            CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, water_faces.size() * 3,
+            CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, dimension_2 * 6,
                                           GL_UNSIGNED_INT, 0));
         } else {
             std::cout << "Shit fucked up\n";
@@ -1108,6 +1118,8 @@ int main(int argc, char* argv[]) {
         glfwPollEvents();
         glfwSwapBuffers(window);
     }
+    delete [] float_arr;
+    delete [] water_faces;
     glfwDestroyWindow(window);
     glfwTerminate();
     exit(EXIT_SUCCESS);
