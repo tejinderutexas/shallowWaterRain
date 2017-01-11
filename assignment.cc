@@ -676,8 +676,6 @@ int main(int argc, char* argv[]) {
                                 22, 20, 21,
                                 21, 23, 22};
     // Water construction
-    // TODO: HEAP ALLOCATE STUFF
-    printf("sizeof(float) == %lu\nsizeof(uint32_t) == %lu\n", sizeof(float), sizeof(uint32_t));
     float water_height = -0.3f;
     int dimension = atoi(argv[1]);
     int dimension_plus = dimension + 1;
@@ -887,6 +885,7 @@ int main(int argc, char* argv[]) {
     float H = 1.7f;
     float time = 0;
     float delta = 0.3f;
+    // FILE * log = fopen(log);
     // Main loop
     while (!glfwWindowShouldClose(window)) {
         // Setup some basic window stuff.
@@ -948,7 +947,7 @@ int main(int argc, char* argv[]) {
         for (int j = 0; j < dimension_plus; j++) {
             for (int i = 0; i < dimension_plus; i++) {
                 water_vel_prev[vel_i] = water_vel_curr[vel_i];
-                water_vel_prev[vel_i + 1] = water_vel_curr[vel_i];
+                water_vel_prev[vel_i + 1] = water_vel_curr[vel_i + 1];
                 vel_i += 2;
 
                 water_height_prev[grid_i] = water_height_curr[grid_i];
@@ -1023,10 +1022,12 @@ int main(int argc, char* argv[]) {
                 vel_i += 2;
             }
         }
-        vel_i = 0;
-        grid_i = 0;
+        grid_i = dimension_plus;
+        vel_i = dimension_plus * 2;
         for (int j = 1; j < dimension; j++){
             for (int i = 1; i < dimension; i++){
+                grid_i++;
+                vel_i += 2;
                 glm::vec2 dudx;
                 glm::vec2 dvdx;
                 glm::vec2 vel       = glm::vec2(water_vel_curr[vel_i], water_vel_curr[vel_i + 1]),
@@ -1035,7 +1036,7 @@ int main(int argc, char* argv[]) {
                           vel_down  = glm::vec2(water_vel_curr[vel_i + dimension_plus * 2],
                                                 water_vel_curr[vel_i + dimension_plus * 2 + 1]),
                           vel_up    = glm::vec2(water_vel_curr[vel_i - dimension_plus * 2],
-                                                      water_vel_curr[vel_i - dimension_plus * 2 + 1]);
+                                                water_vel_curr[vel_i - dimension_plus * 2 + 1]);
 
                 float height       = water_height_prev[grid_i];
                 float height_left  = water_height_prev[grid_i - 1];
@@ -1043,19 +1044,16 @@ int main(int argc, char* argv[]) {
                 float height_down  = water_height_prev[grid_i + dimension_plus];
                 float height_up    = water_height_prev[grid_i - dimension_plus];
                 // TODO: water pressure or some shit 
-                // water_forces[grid_i] = 0;
+                water_forces[grid_i] = 0;
                 float vel_grad_x = (vel_right[0] - vel_left[0]) / (double_dwater);
                 float u_dhdx = vel[0]  * (height_right - height_left) / (double_dwater);
-                float vel_grad_y =
-                    (vel_down[1] - vel_up[1]) / (double_dwater);
-                float v_dhdy = vel[1] * (height_up - height_down) / (double_dwater);
-                water_height_curr[grid_i] =
-                    (-(water_height_prev[grid_i] + H) * (vel_grad_x + vel_grad_y)
-                        - u_dhdx - v_dhdy) * diff
-                    + water_height_prev[grid_i];
-                grid_i++;
-                vel_i += 2;
+                float vel_grad_y = (vel_down[1] - vel_up[1]) / (double_dwater);
+                float v_dhdy = vel[1] * (height_down  - height_up) / (double_dwater);
+                water_height_curr[grid_i] = (-(water_height_prev[grid_i] + H) * (vel_grad_x + vel_grad_y) - u_dhdx - v_dhdy)
+                                            * diff + water_height_prev[grid_i];
             }
+            grid_i++;
+            vel_i += 2;
         }
         if (basic_program.ReadyProgram()){
             // Set uniforms
