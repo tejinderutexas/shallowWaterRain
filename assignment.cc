@@ -1026,6 +1026,7 @@ int main(int argc, char* argv[]) {
         vel_i = dimension_plus * 2;
         for (int j = 1; j < dimension; j++){
             for (int i = 1; i < dimension; i++){
+                int k = dimension_plus * j + i;
                 grid_i++;
                 vel_i += 2;
                 glm::vec2 dudx;
@@ -1052,8 +1053,8 @@ int main(int argc, char* argv[]) {
                 water_height_curr[grid_i] = (-(water_height_prev[grid_i] + H) * (vel_grad_x + vel_grad_y) - u_dhdx - v_dhdy)
                                             * diff + water_height_prev[grid_i];
             }
-            grid_i++;
-            vel_i += 2;
+            grid_i += 2;
+            vel_i  += 4;
         }
         if (basic_program.ReadyProgram()){
             // Set uniforms
