@@ -1,7 +1,6 @@
 #include <fstream>
 #include <iostream>
 #include <string>
-#include <vector>
 #include <map>
 #include <cmath>
 #include <ctime>
@@ -351,9 +350,7 @@ class GLProgram {
         std::map<std::string, GLuint> uniforms;
 
         int vert_attribs;
-        std::vector<size_t> vert_attrib_sizes;
         int frag_attribs;
-        std::vector<size_t> frag_attrib_sizes;
 
         bool HasUniform(std::string uniform_name){
             return uniforms.count(uniform_name) > 0;
@@ -589,6 +586,8 @@ int main(int argc, char* argv[]) {
         std::cout<<"Usage: ./runit.sh dimension maxraindrops"<<std::endl;
         exit(EXIT_SUCCESS);
     }
+    int dimension = atoi(argv[1]);
+    int maxdrops  = atoi(argv[2]);
   
     glfwSetErrorCallback(ErrorCallback);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
@@ -677,18 +676,19 @@ int main(int argc, char* argv[]) {
                                 21, 23, 22};
     // Water construction
     float water_height = -0.3f;
-    int dimension = atoi(argv[1]);
     int dimension_plus = dimension + 1;
     int dimension_2 = dimension * dimension;
     int dimension_plus_2 = dimension_plus * dimension_plus;
-    uint32_t * water_faces    = new uint32_t [dimension_2 * 8];
-    float * float_arr         = new float    [dimension_plus_2 * 11];
-    float * water_vertices    = float_arr;                          // size: dimension_plus_2 * 4
-    float * water_height_curr = float_arr + dimension_plus_2 * 4;   // size: dimension_plus_2
-    float * water_height_prev = float_arr + dimension_plus_2 * 5;   // size: dimension_plus_2
-    float * water_forces      = float_arr + dimension_plus_2 * 6;   // size: dimension_plus_2
-    float * water_vel_prev    = float_arr + dimension_plus_2 * 7;   // size: dimension_plus_2 * 2
-    float * water_vel_curr    = float_arr + dimension_plus_2 * 9;   // size: dimension_plus_2 * 2
+    uint32_t * uint_arr       = new uint32_t [dimension_2 * 8 + maxdrops],
+             * water_faces    = uint_arr;
+
+    float * float_arr         = new float [dimension_plus_2 * 11 + 5 * maxdrops],
+          * water_vertices    = float_arr,                          // size: dimension_plus_2 * 4
+          * water_height_curr = float_arr + dimension_plus_2 * 4,   // size: dimension_plus_2
+          * water_height_prev = float_arr + dimension_plus_2 * 5,   // size: dimension_plus_2
+          * water_forces      = float_arr + dimension_plus_2 * 6,   // size: dimension_plus_2
+          * water_vel_prev    = float_arr + dimension_plus_2 * 7,   // size: dimension_plus_2 * 2
+          * water_vel_curr    = float_arr + dimension_plus_2 * 9;   // size: dimension_plus_2 * 2
     float water_corner = -1.8f, water_len = 3.6f, dwater = water_len / dimension;
     int grid_i = 0, index_i = 0, vert_i = 0, vel_i = 0;
     for (int j = 0; j < dimension_plus; j++) {
@@ -725,28 +725,26 @@ int main(int argc, char* argv[]) {
         }
     }
     // Rain construction
-    std::vector<glm::vec4> rain_drops;
-    std::vector<float> rain_speeds;
-    std::vector<int> rain_indices;
+    float * rain_drops  = float_arr + dimension_plus_2 * 11,
+          * rain_speeds = float_arr + dimension_plus_2 * 11 + 4 * maxdrops;
+
+    uint32_t * rain_indices = uint_arr + dimension_2 * 8;
     float range = 3.0f;
     float precision = 1000.0f;
     int xpos = rand() % 1000;
     int zpos = rand() % 1000;
-    int maxdrops = atoi(argv[2]);
+    int numdrops = 0, head = 0, tail = 0;
     for (int i=0; i < maxdrops; i++){
-        rain_indices.push_back(i);
+        rain_drops[i * 4] = 0.f;
+        rain_drops[i * 4 + 1] = 0.f;
+        rain_drops[i * 4 + 2] = 0.f;
+        rain_drops[i * 4 + 3] = 0.f;
+        rain_speeds[0] = 0.0f;
     }
-    rain_speeds.push_back(0.0f);
     // Plane construction
-    const float plane_vertices [20] = {0.f, -2.f, 0.f, 1.f,
-                                       99999.f, 0.f, 0.f, 0.f,
-                                       0.f, 0.f, 99999.f, 0.f,
-                                       -99999.f, 0.f, 0.f, 0.f,
-                                       0.f, 0.f, -99999.f, 0.f};
-    const int plane_faces [12] = {0, 2, 1,
-                                  0, 3, 2,
-                                  0, 4, 3,
-                                  0, 1, 4};
+    const float plane_vertices [20] = {    0.f, -2.f, 0.f, 1.f,     99999.f, 0.f, 0.f, 0.f,    0.f, 0.f, 99999.f, 0.f,
+                                       -99999.f, 0.f, 0.f, 0.f,    0.f, 0.f, -99999.f, 0.f};
+    const int plane_faces [12] = {0, 2, 1,    0, 3, 2,    0, 4, 3,    0, 1, 4};
     // Setup our VAOs.
     CHECK_GL_ERROR(glGenVertexArrays(kNumVaos, array_objects));
     // Setup the box array object.
@@ -754,81 +752,54 @@ int main(int argc, char* argv[]) {
     // Generate buffer objects
     CHECK_GL_ERROR(glGenBuffers(kNumVbos, &buffer_objects[kBoxVao][0]));
     // Setup vertex data in a VBO.
-    CHECK_GL_ERROR(
-        glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kBoxVao][kVertexBuffer]));
-    CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-                                sizeof(float) * 96,
-                                box_vertices, GL_STATIC_DRAW));
+    CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kBoxVao][kVertexBuffer]));
+    CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 96, box_vertices, GL_STATIC_DRAW));
     CHECK_GL_ERROR(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0));
     CHECK_GL_ERROR(glEnableVertexAttribArray(0));
     // Setup element array buffer.
-    CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-                                buffer_objects[kBoxVao][kIndexBuffer]));
-    CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                                sizeof(uint32_t) * 78,
-                                box_faces, GL_STATIC_DRAW));
+    CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_objects[kBoxVao][kIndexBuffer]));
+    CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * 78, box_faces, GL_STATIC_DRAW));
     // Setup the water array object.
     CHECK_GL_ERROR(glBindVertexArray(array_objects[kWaterVao]));
     // Generate buffer objects
     CHECK_GL_ERROR(glGenBuffers(kNumVbos, &buffer_objects[kWaterVao][0]));
     // Setup vertex data in a VBO.
-    CHECK_GL_ERROR(
-        glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kWaterVao][kVertexBuffer]));
-    CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-                                sizeof(float) * dimension_plus_2 * 4,
-                                water_vertices, GL_STATIC_DRAW));
+    CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kWaterVao][kVertexBuffer]));
+    CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, sizeof(float) * dimension_plus_2 * 4, water_vertices, GL_STATIC_DRAW));
     CHECK_GL_ERROR(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0));
     CHECK_GL_ERROR(glEnableVertexAttribArray(0));
     // Setup vertex data in a VBO.
-    CHECK_GL_ERROR(
-        glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kWaterVao][kVertAttr1]));
-    CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-                                sizeof(float) * dimension_plus_2,
-                                water_height_curr, GL_STATIC_DRAW));
+    CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kWaterVao][kVertAttr1]));
+    CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, sizeof(float) * dimension_plus_2, water_height_curr, GL_STATIC_DRAW));
     CHECK_GL_ERROR(glVertexAttribPointer(1, 1, GL_FLOAT, GL_FALSE, 0, 0));
     CHECK_GL_ERROR(glEnableVertexAttribArray(1));
     // Setup element array buffer.
-    CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-                                buffer_objects[kWaterVao][kIndexBuffer]));
-    CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                                sizeof(uint32_t) * dimension_2 * 6,
-                                water_faces, GL_STATIC_DRAW));
+    CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_objects[kWaterVao][kIndexBuffer]));
+    CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * dimension_2 * 6, water_faces, GL_STATIC_DRAW));
     //setup the rain
     CHECK_GL_ERROR(glBindVertexArray(array_objects[kRainVao]));
     // Generate buffer objects
     CHECK_GL_ERROR(glGenBuffers(kNumVbos, &buffer_objects[kRainVao][0]));
     // Setup vertex data in a VBO.
-    CHECK_GL_ERROR(
-        glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kRainVao][kVertexBuffer]));
-    CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-                                sizeof(float) * rain_drops.size() * 4,
-                                &rain_drops[0], GL_STATIC_DRAW));
+    CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kRainVao][kVertexBuffer]));
+    CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, sizeof(float) * maxdrops * 4, rain_drops, GL_STATIC_DRAW));
     CHECK_GL_ERROR(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0));
     CHECK_GL_ERROR(glEnableVertexAttribArray(0));
     // Setup element array buffer.
-    CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-                                buffer_objects[kRainVao][kIndexBuffer]));
-    CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                                sizeof(uint32_t) * rain_indices.size(),
-                                &rain_indices[0], GL_STATIC_DRAW));
+    CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_objects[kRainVao][kIndexBuffer]));
+    CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * maxdrops, rain_indices, GL_STATIC_DRAW));
     //setup the plane project
     CHECK_GL_ERROR(glBindVertexArray(array_objects[kPlaneVao]));
     // Generate buffer objects
     CHECK_GL_ERROR(glGenBuffers(kNumVbos, &buffer_objects[kPlaneVao][0]));
     // Setup vertex data in a VBO.
-    CHECK_GL_ERROR(
-        glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kPlaneVao][kVertexBuffer]));
-    CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-                                sizeof(float) * 20,
-                                plane_vertices, GL_STATIC_DRAW));
+    CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kPlaneVao][kVertexBuffer]));
+    CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, sizeof(float) * 20, plane_vertices, GL_STATIC_DRAW));
     CHECK_GL_ERROR(glVertexAttribPointer(0, 4, GL_FLOAT, GL_FALSE, 0, 0));
     CHECK_GL_ERROR(glEnableVertexAttribArray(0));
     // Setup element array buffer.
-    CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER,
-                                buffer_objects[kPlaneVao][kIndexBuffer]));
-    CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER,
-                                sizeof(uint32_t) * 12,
-                                plane_faces, GL_STATIC_DRAW));
+    CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_objects[kPlaneVao][kIndexBuffer]));
+    CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * 12, plane_faces, GL_STATIC_DRAW));
 
     GLShader vert = GLShader(vertex_shader, GLShader::VERTEX);
     GLShader point_vert = GLShader(point_vertex_shader,  GLShader::VERTEX);
@@ -905,42 +876,38 @@ int main(int argc, char* argv[]) {
         glm::mat4 view_matrix = glm::lookAt(eye, eye + camera_distance * look, up);
 
         clock_t curr = clock();
-        //float diff = ((float)(curr - prev)/CLOCKS_PER_SEC);
         float diff = 0.003333f / 2.0f;
         time += diff;
         prev = curr;
-        //if (rain_drops.size() > 0){
-        //    int i = 0;
-        //    rain_speeds[i] += gravity * diff;
-        //    rain_drops[i][1] -= rain_speeds[i] * diff;
-        //    std::cout << i << ' ' << rain_speeds[i] << '\n';
-        //}
-        int k = 0;
-        while (k < rain_drops.size()){
-            if (rain_drops[k][1] < water_height){
-                int i = (int)((rain_drops[k][0] - water_corner) / dwater);
-                int j = (int)((rain_drops[k][2] - water_corner) / dwater);
+        for (int x = 0; x < numdrops; x++) {
+            int k = (x + head) % maxdrops;
+            if (rain_drops[k * 4 + 1] < water_height){
+                int i = (int)((rain_drops[k * 4 + 0] - water_corner) / dwater);
+                int j = (int)((rain_drops[k * 4 + 2] - water_corner) / dwater);
                 int index = j * (dimension + 1) + i;
+                numdrops--;
+                head++;
+                water_faces[k] = water_faces[numdrops];
                 water_forces[index] = forceconst;
-                rain_drops.erase(rain_drops.begin() + k);
-                rain_speeds.erase(rain_speeds.begin() + k);
             } else {
                 rain_speeds[k] += gravity * diff;
-                rain_drops[k][1] -= rain_speeds[k] * diff;
-                k++;
+                rain_drops[k * 4 + 1] -= rain_speeds[k] * diff;
             }
         }
         int rain_check = rand() % 1000;
-        if (rain_drops.size() < maxdrops && rain_check > 950){
+        if (numdrops < maxdrops && rain_check > 950){
             float range = 3.0f;
             float precision = 1000.0f;
             int xpos = rand() % 1000;
             int zpos = rand() % 1000;
-            glm::vec4 newpos
-                (xpos / precision * range - 1.5f, 5.0f,
-                 zpos / precision * range - 1.5f, 1.0f);
-            rain_drops.push_back(newpos);
-            rain_speeds.push_back(2.0f);
+            rain_drops[tail * 4] = xpos / precision * range - 1.5f;
+            rain_drops[tail * 4 + 1] = 5.f;
+            rain_drops[tail * 4 + 2] = zpos / precision * range - 1.5f;
+            rain_drops[tail * 4 + 3] = 1.f;
+            rain_speeds[tail] = 2.f;
+            water_faces[numdrops] = tail++;
+            tail %= maxdrops;
+            numdrops++;
         }
         vel_i = 0;
         grid_i = 0;
@@ -1064,15 +1031,11 @@ int main(int argc, char* argv[]) {
             // Draw box.
             basic_program.SetUniform("diffuse_color", box_color);
             CHECK_GL_ERROR(glBindVertexArray(array_objects[kBoxVao]));
-            CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, 78,
-                                          GL_UNSIGNED_INT, 0));
+            CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, 78, GL_UNSIGNED_INT, 0));
             // Draw basic.
             basic_program.SetUniform("diffuse_color", plane_color);
             CHECK_GL_ERROR(glBindVertexArray(array_objects[kPlaneVao]));
-            CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, 12,
-                                          GL_UNSIGNED_INT, 0));
-        } else {
-            std::cout << "Shit fucked up\n";
+            CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, 12, GL_UNSIGNED_INT, 0));
         }
         if (water_program.ReadyProgram()){
             // Set uniforms
@@ -1083,34 +1046,23 @@ int main(int argc, char* argv[]) {
             // Draw water
             water_program.SetUniform("diffuse_color", water_color);
             CHECK_GL_ERROR(glBindVertexArray(array_objects[kWaterVao]));
-            CHECK_GL_ERROR(
-                glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kWaterVao][kVertAttr1]));
-            // CHECK_GL_ERROR(glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 0, 0));
-            CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-                                        sizeof(float) * dimension_plus_2,
-                                        water_height_curr, GL_STATIC_DRAW));
-            // CHECK_GL_ERROR(glVertexAttribPointer(2, 1, GL_FLOAT, GL_FALSE, 0, 0));
-            CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, dimension_2 * 6,
-                                          GL_UNSIGNED_INT, 0));
-        } else {
-            std::cout << "Shit fucked up\n";
+            CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kWaterVao][kVertAttr1]));
+            CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, sizeof(float) * dimension_plus_2, water_height_curr, GL_STATIC_DRAW));
+            CHECK_GL_ERROR(glDrawElements(GL_TRIANGLES, dimension_2 * 6, GL_UNSIGNED_INT, 0));
         }
 
-        if (rain_program.ReadyProgram()){
+        if (rain_program.ReadyProgram() && numdrops > 0){
             rain_program.SetUniform("projection", projection_matrix);
             rain_program.SetUniform("view", view_matrix);
             glm::vec4 red = glm::vec4(1.0f, 0.0f, 0.0f, 1.0f);
             //setup the rain
             CHECK_GL_ERROR(glBindVertexArray(array_objects[kRainVao]));
             // Setup vertex data in a VBO.
-            CHECK_GL_ERROR(
-                glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kRainVao][kVertexBuffer]));
-            CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER,
-                                        sizeof(float) * rain_drops.size() * 4,
-                                        &rain_drops[0], GL_STATIC_DRAW));
-            CHECK_GL_ERROR(glDrawArrays(GL_POINTS, 0, rain_drops.size()));
-        } else {
-            std::cout << "Shit fucked up during rain program\n";
+            CHECK_GL_ERROR(glBindBuffer(GL_ARRAY_BUFFER, buffer_objects[kRainVao][kVertexBuffer]));
+            CHECK_GL_ERROR(glBufferData(GL_ARRAY_BUFFER, sizeof(float) * maxdrops * 4, rain_drops, GL_STATIC_DRAW));
+            CHECK_GL_ERROR(glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, buffer_objects[kRainVao][kIndexBuffer]));
+            CHECK_GL_ERROR(glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(uint32_t) * numdrops, rain_indices, GL_STATIC_DRAW));
+            CHECK_GL_ERROR(glDrawArrays(GL_POINTS, 0, numdrops));
         }
 
         // Poll and swap.
@@ -1118,7 +1070,7 @@ int main(int argc, char* argv[]) {
         glfwSwapBuffers(window);
     }
     delete [] float_arr;
-    delete [] water_faces;
+    delete [] uint_arr;
     glfwDestroyWindow(window);
     glfwTerminate();
     exit(EXIT_SUCCESS);
